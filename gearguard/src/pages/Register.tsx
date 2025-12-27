@@ -30,8 +30,7 @@ export default function Register() {
     company: "",
     role: "" as UserRole | "",
   });
-  const [isLoading, setIsLoading] = useState(false);
-  const { register } = useAuth();
+  const { register, isLoading } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -44,15 +43,13 @@ export default function Register() {
       return;
     }
     
-    setIsLoading(true);
     const success = await register(
       formData.name, 
       formData.email, 
       formData.password, 
       formData.role as UserRole,
-      formData.company // Pass company to Supabase
+      formData.company
     );
-    setIsLoading(false);
     
     if (success) {
       navigate("/app");

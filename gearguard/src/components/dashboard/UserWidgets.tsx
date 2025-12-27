@@ -31,34 +31,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRealTimeUpdates } from "@/hooks/useRoleSync";
+import { useMaintenance } from "@/contexts/MaintenanceContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useEquipment } from "@/contexts/EquipmentContext";
 import { cn } from "@/lib/utils";
-
-const myRequests = [
-  {
-    id: 1,
-    subject: "Air conditioning not working",
-    equipment: "HVAC Unit #12",
-    status: "in_progress",
-    createdAt: "Jan 18, 2024",
-    updatedAt: "2 hours ago",
-  },
-  {
-    id: 2,
-    subject: "Printer paper jam issue",
-    equipment: "Industrial Printer #7",
-    status: "new",
-    createdAt: "Jan 19, 2024",
-    updatedAt: "Just now",
-  },
-  {
-    id: 3,
-    subject: "Monitor flickering",
-    equipment: "Workstation #15",
-    status: "completed",
-    createdAt: "Jan 15, 2024",
-    updatedAt: "Jan 17, 2024",
-  },
-];
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -66,7 +42,7 @@ const getStatusBadge = (status: string) => {
       return <Badge variant="info">Submitted</Badge>;
     case "in_progress":
       return <Badge variant="warning">In Progress</Badge>;
-    case "completed":
+    case "repaired":
       return <Badge variant="success">Completed</Badge>;
     default:
       return <Badge variant="outline">{status}</Badge>;
@@ -79,7 +55,7 @@ const getStatusIcon = (status: string) => {
       return <Clock className="w-5 h-5 text-info" />;
     case "in_progress":
       return <AlertTriangle className="w-5 h-5 text-warning" />;
-    case "completed":
+    case "repaired":
       return <CheckCircle2 className="w-5 h-5 text-success" />;
     default:
       return <Clock className="w-5 h-5 text-muted-foreground" />;
@@ -88,13 +64,52 @@ const getStatusIcon = (status: string) => {
 
 export function UserWidgets() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [subject, setSubject] = useState("");
+  const [selectedEquipment, setSelectedEquipment] = useState("");
+  const [description, setDescription] = useState("");
+  
   const { updateKey, isPreviewActive } = useRealTimeUpdates();
+  const { requests, addRequest, lastUpdate } = useMaintenance();
+  const { user } = useAuth();
+  const { equipment } = useEquipment();
 
-  const openRequests = myRequests.filter(r => r.status !== "completed").length;
-  const completedRequests = myRequests.filter(r => r.status === "completed").length;
+  // Filter requests created by the current user
+  const myRequests = requests.filter(r => r.createdBy === user?.name || r.lastUpdatedBy === user?.name);
+  const openRequests = myRequests.filter(r => r.status !== "repaired" && r.status !== "scrap").length;
+  const completedRequests = myRequests.filter(r => r.status === "repaired").length;
+  
+  const handleSubmit = () => {
+    if (!subject || !selectedEquipment || !description) {
+      return;
+    }
+    
+    const equipmentItem = equipment.find(e => e.id.toString() === selectedEquipment);
+    
+    addRequest({
+      subject,
+      equipment: equipmentItem?.name || selectedEquipment,
+      description,
+      type: "corrective",
+      category: equipmentItem?.category || "General",
+      team: equipmentItem?.team || "Mechanics",
+      technician: "Unassigned",
+      technicianAvatar: "https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=32&h=32&fit=crop&crop=face",
+      status: "new",
+      priority: "medium",
+      dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      estimatedHours: 2,
+      createdBy: user?.name || "User",
+    });
+    
+    // Reset form
+    setSubject("");
+    setSelectedEquipment("");
+    setDescription("");
+    setIsDialogOpen(false);
+  };
 
   return (
-    <div key={updateKey} className={cn("space-y-6 animate-widget-enter", isPreviewActive && "pointer-events-none")}>
+    <div key={`${updateKey}-${lastUpdate}`} className={cn("space-y-6 animate-widget-enter", isPreviewActive && "pointer-events-none")}>
       {/* Welcome & Quick Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -118,18 +133,25 @@ export function UserWidgets() {
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="subject">Subject</Label>
-                <Input id="subject" placeholder="Brief description of the issue" />
+                <Input 
+                  id="subject" 
+                  placeholder="Brief description of the issue"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Equipment / Location</Label>
-                <Select>
+                <Select value={selectedEquipment} onValueChange={setSelectedEquipment}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select equipment" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="hvac">HVAC Unit #12</SelectItem>
-                    <SelectItem value="printer">Industrial Printer #7</SelectItem>
-                    <SelectItem value="workstation">Workstation #15</SelectItem>
+                    {equipment.map(eq => (
+                      <SelectItem key={eq.id} value={eq.id.toString()}>
+                        {eq.name}
+                      </SelectItem>
+                    ))}
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
@@ -140,6 +162,8 @@ export function UserWidgets() {
                   id="description" 
                   placeholder="Please describe the issue in detail..."
                   rows={4}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
                 />
               </div>
             </div>
@@ -147,7 +171,7 @@ export function UserWidgets() {
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button className="gap-2" onClick={() => setIsDialogOpen(false)}>
+              <Button className="gap-2" onClick={handleSubmit}>
                 <Send className="w-4 h-4" />
                 Submit Request
               </Button>
@@ -207,9 +231,9 @@ export function UserWidgets() {
                     {getStatusBadge(request.status)}
                   </div>
                   <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                    <span>Created: {request.createdAt}</span>
+                    <span>Created: {request.createdAt ? new Date(request.createdAt).toLocaleDateString() : 'N/A'}</span>
                     <span>•</span>
-                    <span>Updated: {request.updatedAt}</span>
+                    <span>Updated: {request.lastUpdatedAt ? new Date(request.lastUpdatedAt).toLocaleDateString() : 'N/A'}</span>
                   </div>
                 </div>
               </div>

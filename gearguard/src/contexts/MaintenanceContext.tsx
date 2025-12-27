@@ -18,7 +18,33 @@ export interface MaintenanceRequest {
   description: string;
   lastUpdatedBy?: string;
   lastUpdatedAt?: string;
+  createdBy?: string;
+  createdAt?: string;
 }
+
+// LocalStorage key
+const STORAGE_KEY = "gearguard_maintenance_requests";
+
+// Helper functions for localStorage
+const getStoredRequests = (): MaintenanceRequest[] => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (error) {
+    console.error("Error reading maintenance requests from localStorage:", error);
+  }
+  return initialRequests;
+};
+
+const saveRequests = (requests: MaintenanceRequest[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
+  } catch (error) {
+    console.error("Error saving maintenance requests to localStorage:", error);
+  }
+};
 
 const initialRequests: MaintenanceRequest[] = [
   {
@@ -129,8 +155,13 @@ interface MaintenanceContextType {
 const MaintenanceContext = createContext<MaintenanceContextType | undefined>(undefined);
 
 export function MaintenanceProvider({ children }: { children: ReactNode }) {
-  const [requests, setRequests] = useState<MaintenanceRequest[]>(initialRequests);
+  const [requests, setRequests] = useState<MaintenanceRequest[]>(() => getStoredRequests());
   const [lastUpdate, setLastUpdate] = useState(Date.now());
+
+  // Save to localStorage whenever requests change
+  useEffect(() => {
+    saveRequests(requests);
+  }, [requests]);
 
   const updateRequestStatus = useCallback((
     id: number, 
@@ -183,7 +214,8 @@ export function MaintenanceProvider({ children }: { children: ReactNode }) {
       ...request,
       id: Date.now(),
       lastUpdatedAt: new Date().toISOString(),
-      lastUpdatedBy: "Manager",
+      lastUpdatedBy: request.createdBy || "User",
+      createdAt: new Date().toISOString(),
     };
     setRequests(prev => [...prev, newRequest]);
     setLastUpdate(Date.now());

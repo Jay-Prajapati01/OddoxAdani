@@ -1,6 +1,9 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from "react";
 import { toast } from "sonner";
 import { Wrench, Zap, Monitor, LucideIcon } from "lucide-react";
+
+// LocalStorage key
+const STORAGE_KEY = "gearguard_teams";
 
 export interface TeamMember {
   id: number;
@@ -23,6 +26,27 @@ export interface Team {
   completedToday: number;
   members: TeamMember[];
 }
+
+// Helper functions for localStorage
+const getStoredTeams = (): Team[] => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (error) {
+    console.error("Error reading teams from localStorage:", error);
+  }
+  return initialTeams;
+};
+
+const saveTeams = (teams: Team[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(teams));
+  } catch (error) {
+    console.error("Error saving teams to localStorage:", error);
+  }
+};
 
 const initialTeams: Team[] = [
   {
@@ -163,8 +187,13 @@ interface TeamsContextType {
 const TeamsContext = createContext<TeamsContextType | undefined>(undefined);
 
 export function TeamsProvider({ children }: { children: ReactNode }) {
-  const [teams, setTeams] = useState<Team[]>(initialTeams);
+  const [teams, setTeams] = useState<Team[]>(() => getStoredTeams());
   const [lastUpdate, setLastUpdate] = useState(Date.now());
+
+  // Save to localStorage whenever teams change
+  useEffect(() => {
+    saveTeams(teams);
+  }, [teams]);
 
   const addTeam = useCallback((team: Omit<Team, "id" | "members" | "activeRequests" | "completedToday">) => {
     const newTeam: Team = {

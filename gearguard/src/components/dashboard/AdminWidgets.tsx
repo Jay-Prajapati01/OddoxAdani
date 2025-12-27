@@ -17,38 +17,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useRealTimeUpdates } from "@/hooks/useRoleSync";
+import { useMaintenance } from "@/contexts/MaintenanceContext";
+import { useEquipment } from "@/contexts/EquipmentContext";
+import { useTeams } from "@/contexts/TeamsContext";
 import { cn } from "@/lib/utils";
-
-const systemStats = [
-  {
-    title: "Total Equipment",
-    value: "248",
-    change: "+12",
-    icon: Wrench,
-    color: "bg-primary",
-  },
-  {
-    title: "Maintenance Teams",
-    value: "5",
-    change: "+1",
-    icon: Users,
-    color: "bg-secondary",
-  },
-  {
-    title: "Open Requests",
-    value: "23",
-    subtitle: "Active",
-    icon: ClipboardList,
-    color: "bg-warning",
-  },
-  {
-    title: "Closed This Month",
-    value: "87",
-    subtitle: "Resolved",
-    icon: CheckCircle2,
-    color: "bg-success",
-  },
-];
 
 const systemHealth = [
   { name: "Database", status: "healthy", uptime: 99.9 },
@@ -71,9 +43,49 @@ const userActivity = [
 
 export function AdminWidgets() {
   const { updateKey, isPreviewActive } = useRealTimeUpdates();
+  const { requests, lastUpdate: maintenanceUpdate } = useMaintenance();
+  const { equipment, lastUpdate: equipmentUpdate } = useEquipment();
+  const { teams, lastUpdate: teamsUpdate } = useTeams();
+  
+  // Calculate real-time stats
+  const totalEquipment = equipment.length;
+  const totalTeams = teams.length;
+  const openRequests = requests.filter(r => r.status === "new" || r.status === "in_progress").length;
+  const closedThisMonth = requests.filter(r => r.status === "repaired" || r.status === "scrap").length;
+  
+  const systemStats = [
+    {
+      title: "Total Equipment",
+      value: totalEquipment.toString(),
+      change: equipment.filter(e => e.status === "operational").length > 0 ? `+${equipment.filter(e => e.status === "operational").length}` : "0",
+      icon: Wrench,
+      color: "bg-primary",
+    },
+    {
+      title: "Maintenance Teams",
+      value: totalTeams.toString(),
+      change: teams.reduce((sum, t) => sum + t.members.length, 0) > 0 ? `${teams.reduce((sum, t) => sum + t.members.length, 0)} members` : "0",
+      icon: Users,
+      color: "bg-secondary",
+    },
+    {
+      title: "Open Requests",
+      value: openRequests.toString(),
+      subtitle: "Active",
+      icon: ClipboardList,
+      color: "bg-warning",
+    },
+    {
+      title: "Closed This Month",
+      value: closedThisMonth.toString(),
+      subtitle: "Resolved",
+      icon: CheckCircle2,
+      color: "bg-success",
+    },
+  ];
   
   return (
-    <div key={updateKey} className={cn("space-y-6 animate-widget-enter", isPreviewActive && "pointer-events-none")}>
+    <div key={`${updateKey}-${maintenanceUpdate}-${equipmentUpdate}-${teamsUpdate}`} className={cn("space-y-6 animate-widget-enter", isPreviewActive && "pointer-events-none")}>
       {/* Welcome & Quick Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

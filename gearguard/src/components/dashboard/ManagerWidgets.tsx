@@ -15,19 +15,18 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRealTimeUpdates } from "@/hooks/useRoleSync";
 import { useMaintenance } from "@/contexts/MaintenanceContext";
+import { useEquipment } from "@/contexts/EquipmentContext";
+import { useTeams } from "@/contexts/TeamsContext";
 import { cn } from "@/lib/utils";
-
-const teamWorkload = [
-  { team: "Mechanics", assigned: 8, available: 3, color: "bg-primary" },
-  { team: "Electricians", assigned: 4, available: 2, color: "bg-warning" },
-  { team: "IT Support", assigned: 5, available: 4, color: "bg-info" },
-];
 
 export function ManagerWidgets() {
   const { updateKey, isPreviewActive } = useRealTimeUpdates();
   const { requests, lastUpdate } = useMaintenance();
+  const { equipment, lastUpdate: equipmentUpdate } = useEquipment();
+  const { teams, lastUpdate: teamsUpdate } = useTeams();
   
   // Real-time data from shared context
+  const totalEquipment = equipment.length;
   const openRequests = requests.filter(r => r.status === "new" || r.status === "in_progress").length;
   const completedToday = requests.filter(r => r.status === "repaired").length;
   const preventiveCount = requests.filter(r => r.type === "preventive").length;
@@ -46,12 +45,24 @@ export function ManagerWidgets() {
       date: r.dueDate,
       type: r.subject
     }));
+    
+  // Calculate team workload from real data
+  const teamWorkload = teams.map(team => {
+    const teamRequests = requests.filter(r => r.team === team.name && (r.status === "new" || r.status === "in_progress"));
+    const availableMembers = team.members.filter(m => m.status === "available").length;
+    return {
+      team: team.name,
+      assigned: teamRequests.length,
+      available: availableMembers,
+      color: team.color,
+    };
+  });
 
   const kpiCards = [
     {
       title: "Total Equipment",
-      value: "248",
-      change: "+12 this month",
+      value: totalEquipment.toString(),
+      change: `${equipment.filter(e => e.status === "operational").length} operational`,
       changeType: "positive",
       icon: Wrench,
       color: "bg-primary",
@@ -83,7 +94,7 @@ export function ManagerWidgets() {
   ];
   
   return (
-    <div key={`${updateKey}-${lastUpdate}`} className={cn("space-y-6 animate-widget-enter", isPreviewActive && "pointer-events-none")}>
+    <div key={`${updateKey}-${lastUpdate}-${equipmentUpdate}-${teamsUpdate}`} className={cn("space-y-6 animate-widget-enter", isPreviewActive && "pointer-events-none")}>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Manager Dashboard</h1>

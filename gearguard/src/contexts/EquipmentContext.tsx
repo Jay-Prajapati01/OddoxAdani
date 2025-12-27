@@ -1,5 +1,8 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from "react";
 import { toast } from "sonner";
+
+// LocalStorage key
+const STORAGE_KEY = "gearguard_equipment";
 
 export interface Equipment {
   id: number;
@@ -14,6 +17,27 @@ export interface Equipment {
   team: string;
   notes?: string;
 }
+
+// Helper functions for localStorage
+const getStoredEquipment = (): Equipment[] => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (error) {
+    console.error("Error reading equipment from localStorage:", error);
+  }
+  return initialEquipment;
+};
+
+const saveEquipment = (equipment: Equipment[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(equipment));
+  } catch (error) {
+    console.error("Error saving equipment to localStorage:", error);
+  }
+};
 
 const initialEquipment: Equipment[] = [
   {
@@ -115,8 +139,13 @@ interface EquipmentContextType {
 const EquipmentContext = createContext<EquipmentContextType | undefined>(undefined);
 
 export function EquipmentProvider({ children }: { children: ReactNode }) {
-  const [equipment, setEquipment] = useState<Equipment[]>(initialEquipment);
+  const [equipment, setEquipment] = useState<Equipment[]>(() => getStoredEquipment());
   const [lastUpdate, setLastUpdate] = useState(Date.now());
+
+  // Save to localStorage whenever equipment changes
+  useEffect(() => {
+    saveEquipment(equipment);
+  }, [equipment]);
 
   const addEquipment = useCallback((newEquipment: Omit<Equipment, "id">) => {
     const equipmentWithId: Equipment = {

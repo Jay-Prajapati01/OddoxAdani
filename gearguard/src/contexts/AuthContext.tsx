@@ -1,15 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
-import type { User as SupabaseUser, Session } from "@supabase/supabase-js";
 
 export type UserRole = "manager" | "technician" | "admin" | "user";
 
-// Extended user type with profile data
+// User interface for stored user data
 export interface User {
   id: string;
   name: string;
   email: string;
+  password: string; // Stored for hackathon demo purposes
   role: UserRole;
   avatar?: string;
   company?: string;
@@ -29,6 +28,13 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// LocalStorage keys
+const STORAGE_KEYS = {
+  USERS: 'gearguard_users',
+  CURRENT_USER: 'gearguard_user',
+  ROLE_PREVIEW: 'gearguard_role_preview',
+};
 
 // Permissions matrix
 const rolePermissions: Record<UserRole, string[]> = {
@@ -84,50 +90,66 @@ const routeAccess: Record<string, UserRole[]> = {
   "/app/settings": ["admin", "manager"],
 };
 
-// Helper function to fetch user profile from Supabase
-async function fetchUserProfile(userId: string): Promise<User | null> {
+// Helper: Get all registered users from localStorage
+function getAllUsers(): User[] {
   try {
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-
-    if (error) {
-      console.error('Error fetching user profile:', error);
-      return null;
-    }
-
-    if (!data) return null;
-
-    return {
-      id: data.id,
-      name: data.name || 'User',
-      email: data.email || '',
-      role: (data.role as UserRole) || 'user',
-      avatar: data.avatar_url || undefined,
-      company: data.company || undefined,
-    };
+    const usersData = localStorage.getItem(STORAGE_KEYS.USERS);
+    return usersData ? JSON.parse(usersData) : [];
   } catch (error) {
-    console.error('Error in fetchUserProfile:', error);
+    console.error('Error reading users from localStorage:', error);
+    return [];
+  }
+}
+
+// Helper: Save users to localStorage
+function saveUsers(users: User[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+  } catch (error) {
+    console.error('Error saving users to localStorage:', error);
+  }
+}
+
+// Helper: Get current logged-in user
+function getCurrentUser(): User | null {
+  try {
+    const userData = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+    return userData ? JSON.parse(userData) : null;
+  } catch (error) {
+    console.error('Error reading current user from localStorage:', error);
     return null;
   }
+}
+
+// Helper: Save current user
+function saveCurrentUser(user: User | null): void {
+  try {
+    if (user) {
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+    }
+  } catch (error) {
+    console.error('Error saving current user to localStorage:', error);
+  }
+}
+
+// Helper: Generate unique ID
+function generateId(): string {
+  return `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Initialize auth state and set up listener
+  // Initialize auth state from localStorage on mount
   useEffect(() => {
-    // Check for existing session
-    const initAuth = async () => {
+    const initAuth = () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session?.user) {
-          const profile = await fetchUserProfile(session.user.id);
-          setUser(profile);
+        const storedUser = getCurrentUser();
+        if (storedUser) {
+          setUser(storedUser);
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
@@ -137,66 +159,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     initAuth();
-
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event);
-      
-      if (session?.user) {
-        const profile = await fetchUserProfile(session.user.id);
-        setUser(profile);
-      } else {
-        setUser(null);
-      }
-    });
-
-    // Cleanup subscription
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
+    setIsLoading(true);
+    
     try {
-      // Sign in with Supabase
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      // Simulate async operation for realistic UX
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      if (error) {
-        console.error('Login error:', error);
-        toast.error("Login Failed", {
-          description: error.message || "Invalid email or password",
+      // Validate inputs
+      if (!email.trim() || !password.trim()) {
+        setIsLoading(false);
+        toast.error("Invalid Input", {
+          description: "Please enter both email and password",
         });
         return false;
       }
 
-      if (data.user) {
-        // Fetch user profile
-        const profile = await fetchUserProfile(data.user.id);
-        
-        if (!profile) {
-          toast.error("Profile Not Found", {
-            description: "Unable to load user profile",
-          });
-          return false;
-        }
+      // Get all registered users
+      const users = getAllUsers();
+      
+      // Find user by email and password
+      const foundUser = users.find(
+        u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
+      );
 
-        setUser(profile);
-        
-        toast.success("Welcome back!", {
-          description: `Logged in as ${profile.role.charAt(0).toUpperCase() + profile.role.slice(1)}`,
+      if (!foundUser) {
+        setIsLoading(false);
+        toast.error("Login Failed", {
+          description: "Invalid email or password. Please try again or sign up.",
         });
-        
-        return true;
+        return false;
       }
 
-      return false;
+      // Login successful
+      setUser(foundUser);
+      saveCurrentUser(foundUser);
+      setIsLoading(false);
+      
+      toast.success("Welcome back!", {
+        description: `Logged in as ${foundUser.role.charAt(0).toUpperCase() + foundUser.role.slice(1)}`,
+      });
+      
+      return true;
     } catch (error: any) {
       console.error('Login error:', error);
+      setIsLoading(false);
+      
       toast.error("Login Error", {
-        description: error.message || "An unexpected error occurred",
+        description: "An unexpected error occurred. Please try again.",
       });
       return false;
     }
@@ -209,73 +221,85 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     role: UserRole,
     company?: string
   ): Promise<boolean> => {
+    setIsLoading(true);
+    
     try {
+      // Simulate async operation for realistic UX
+      await new Promise(resolve => setTimeout(resolve, 800));
+
       // Validate inputs
       if (!name.trim() || !email.trim() || !password.trim()) {
+        setIsLoading(false);
         toast.error("Invalid Input", {
-          description: "Please fill in all fields",
+          description: "Please fill in all required fields",
+        });
+        return false;
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        setIsLoading(false);
+        toast.error("Invalid Email", {
+          description: "Please enter a valid email address (e.g., user@example.com)",
         });
         return false;
       }
 
       if (password.length < 6) {
+        setIsLoading(false);
         toast.error("Weak Password", {
           description: "Password must be at least 6 characters",
         });
         return false;
       }
 
-      // Sign up with Supabase
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            name,
-            role,
-            company,
-          },
-        },
-      });
+      // Get existing users
+      const users = getAllUsers();
+      
+      // Check if email already exists
+      const emailExists = users.some(
+        u => u.email.toLowerCase() === email.toLowerCase()
+      );
 
-      if (error) {
-        console.error('Registration error:', error);
-        
-        if (error.message.includes('already registered')) {
-          toast.error("Email Already Registered", {
-            description: "This email is already in use. Please sign in instead.",
-          });
-        } else {
-          toast.error("Registration Failed", {
-            description: error.message,
-          });
-        }
+      if (emailExists) {
+        setIsLoading(false);
+        toast.error("Email Already Registered", {
+          description: "This email is already in use. Please sign in instead.",
+        });
         return false;
       }
 
-      if (data.user) {
-        // Wait a bit for the trigger to create the profile
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Fetch the created profile
-        const profile = await fetchUserProfile(data.user.id);
-        
-        if (profile) {
-          setUser(profile);
-          
-          toast.success("Account Created!", {
-            description: `Welcome to GearGuard, ${name}!`,
-          });
-          
-          return true;
-        }
-      }
+      // Create new user
+      const newUser: User = {
+        id: generateId(),
+        name: name.trim(),
+        email: email.toLowerCase().trim(),
+        password: password, // Stored as-is for hackathon demo
+        role,
+        company: company?.trim(),
+      };
 
-      return false;
+      // Save to users list
+      users.push(newUser);
+      saveUsers(users);
+
+      // Auto-login the new user
+      setUser(newUser);
+      saveCurrentUser(newUser);
+      setIsLoading(false);
+      
+      toast.success("🎉 Account Created!", {
+        description: `Welcome to GearGuard, ${name}!`,
+      });
+      
+      return true;
     } catch (error: any) {
       console.error('Registration error:', error);
+      setIsLoading(false);
+      
       toast.error("Registration Error", {
-        description: error.message || "An unexpected error occurred",
+        description: "An unexpected error occurred. Please try again.",
       });
       return false;
     }
@@ -283,8 +307,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await supabase.auth.signOut();
+      // Clear current user
       setUser(null);
+      saveCurrentUser(null);
+      
+      // Clear demo role preview if exists
+      localStorage.removeItem(STORAGE_KEYS.ROLE_PREVIEW);
       
       toast.info("Logged Out", {
         description: "You have been logged out successfully",
@@ -292,7 +320,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error: any) {
       console.error('Logout error:', error);
       toast.error("Logout Error", {
-        description: error.message,
+        description: "An error occurred while logging out",
       });
     }
   };
