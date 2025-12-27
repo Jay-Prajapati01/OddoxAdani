@@ -4,28 +4,27 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Shield, Mail, Lock, ArrowRight, Home } from "lucide-react";
-import { useAuth, UserRole } from "@/contexts/AuthContext";
-import { roleLabels } from "@/config/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [selectedRole, setSelectedRole] = useState<UserRole>("manager");
+  const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    login(email, password, selectedRole);
-    navigate("/app");
+    setIsLoading(true);
+    
+    const success = await login(email, password);
+    
+    setIsLoading(false);
+    
+    if (success) {
+      navigate("/app");
+    }
   };
 
   return (
@@ -146,26 +145,6 @@ export default function Login() {
               </div>
             </div>
 
-            {/* Demo Role Selector */}
-            <div className="space-y-2 p-4 rounded-lg bg-muted/50 border border-border">
-              <Label className="text-sm font-medium">Demo Mode: Select Role</Label>
-              <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as UserRole)}>
-                <SelectTrigger className="h-12">
-                  <SelectValue placeholder="Select a role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(roleLabels) as UserRole[]).map((role) => (
-                    <SelectItem key={role} value={role}>
-                      {roleLabels[role]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Choose a role to preview different dashboard views
-              </p>
-            </div>
-
             <div className="flex items-center gap-2">
               <Checkbox id="remember" />
               <Label htmlFor="remember" className="text-sm font-normal cursor-pointer">
@@ -173,9 +152,9 @@ export default function Login() {
               </Label>
             </div>
 
-            <Button type="submit" size="lg" className="w-full gap-2">
-              Sign in
-              <ArrowRight className="w-4 h-4" />
+            <Button type="submit" size="lg" className="w-full gap-2" disabled={isLoading}>
+              {isLoading ? "Signing in..." : "Sign in"}
+              {!isLoading && <ArrowRight className="w-4 h-4" />}
             </Button>
           </form>
 

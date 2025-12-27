@@ -13,6 +13,7 @@ import {
 import { Shield, Mail, Lock, User, Building, ArrowRight, CheckCircle, Home } from "lucide-react";
 import { useAuth, UserRole } from "@/contexts/AuthContext";
 import { roleLabels } from "@/config/navigation";
+import { toast } from "sonner";
 
 const benefits = [
   "Unlimited equipment tracking",
@@ -29,14 +30,33 @@ export default function Register() {
     company: "",
     role: "" as UserRole | "",
   });
+  const [isLoading, setIsLoading] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const role = formData.role || "user";
-    register(formData.name, formData.email, formData.password, role as UserRole);
-    navigate("/app");
+    
+    if (!formData.role) {
+      toast.error("Role Required", {
+        description: "Please select your role",
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+    const success = await register(
+      formData.name, 
+      formData.email, 
+      formData.password, 
+      formData.role as UserRole,
+      formData.company // Pass company to Supabase
+    );
+    setIsLoading(false);
+    
+    if (success) {
+      navigate("/app");
+    }
   };
 
   return (
@@ -153,13 +173,13 @@ export default function Register() {
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Must be at least 8 characters with numbers and symbols
+                Must be at least 6 characters
               </p>
             </div>
 
-            <Button type="submit" size="lg" className="w-full gap-2 mt-6">
-              Create account
-              <ArrowRight className="w-4 h-4" />
+            <Button type="submit" size="lg" className="w-full gap-2 mt-6" disabled={isLoading || !formData.role}>
+              {isLoading ? "Creating account..." : "Create account"}
+              {!isLoading && <ArrowRight className="w-4 h-4" />}
             </Button>
 
             <p className="text-xs text-muted-foreground text-center mt-4">
